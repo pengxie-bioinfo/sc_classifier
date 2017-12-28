@@ -1,0 +1,45 @@
+import pandas as pd
+import numpy as np
+from sklearn import preprocessing
+import pickle
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+from NN_utils import nn_pred
+from RawData_functions import label_2_matrix, remove_mt_rp, input_formatting
+import argparse
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input', type=str, help='Directory of input file', default=None)
+    parser.add_argument('--input_is_csv', type=str, help='If set to True, the input will be formatted before running', default=False)
+    parser.add_argument('--output', type=str, help='Directory of output file', default=None)
+    parser.add_argument('--predictor', type=str, help='Which predictor to use, e.g. T_cell', default=None)
+    args = parser.parse_args()
+    input = args.input
+    output = args.output
+    model_tag = args.predictor  # Tag of the pre-trained model
+
+    ###################################################
+    # Load testing data
+    ###################################################
+    # Format conversion
+    if args.input_is_csv:
+        input_formatting(input, input+'.pickle')
+        data = pickle.load(open(input+'.pickle', 'rb'))
+    else:
+        data = pickle.load(open(input, 'rb'))
+    # Add dummy parameters
+    lab = [0] * len(data[0])
+    lab[0] = 1
+    lab_mat = label_2_matrix(lab)
+    data = data + [lab_mat] + [list(range(len(lab)))]
+    data[0], data[1] = remove_mt_rp(data[0], data[1])
+    data[0] = preprocessing.scale(data[0], axis=1)
+
+    ###################################################
+    # Make predictions
+    ###################################################
+
+    pred_prob, pred_lab = nn_pred(model_tag, data)
+    df = pd.DataFrame({'Pred_prob': pred_prob[:, 1], 'Pred_lab': pred_lab})
+    df.to_csv(output)
