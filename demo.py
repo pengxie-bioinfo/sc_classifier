@@ -11,19 +11,6 @@ mpl.rcParams['xtick.labelsize'] = 16
 mpl.rcParams['ytick.labelsize'] = 16
 mpl.rcParams['axes.labelsize'] = 18
 
-def poslab_2_all(pos_lab, n):
-    all_lab = [0]*n
-    for i in pos_lab:
-        all_lab[i] = 1
-    return(all_lab)
-
-def load_pdac(sample_tag, lab):
-    data = pickle.load(open(sample_tag+".pickle", 'rb'))
-    lab = poslab_2_all(lab, len(data[0]))
-    lab_mat = label_2_matrix(lab)
-    data = data + [lab_mat] + [list(range(len(lab)))]
-    return(data)
-
 if __name__ == '__main__':
     model_tag = 'T_cell'  # Tag of the pre-trained model
     test_tag = 'test_data'    # Tag of testing data
