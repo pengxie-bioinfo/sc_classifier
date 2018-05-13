@@ -65,6 +65,7 @@ def build_graph(is_training, w_input, w_hidden=[200, 100], w_output=2, given_ini
     x_scale = tf.placeholder(tf.float32, [None, w_input])
     xs = tf.placeholder(tf.float32, [None, w_input])
     ys = tf.placeholder(tf.float32, [None, w_output])
+    class_factor = tf.placeholder(tf.float32, [None, w_output])  # A factor for balancing class training samples
     kp = tf.placeholder(tf.float32, len(w_hidden))
     param = []
 
@@ -72,6 +73,31 @@ def build_graph(is_training, w_input, w_hidden=[200, 100], w_output=2, given_ini
     #     xs = (xs - x_shift) / x_scale  # Subject to change!!!
 
     current_input = xs
+
+    # Input ---> hidden layers
+    # for layer_i, n_output in enumerate(w_hidden):
+    #     # 1. Initialize parameters
+    #     n_input = int(current_input.get_shape()[1])
+    #     if given_initial == None:
+    #         W_init, b_init = None, None
+    #     else:
+    #         W_init, b_init = given_initial[layer_i]
+    #     W = weight_variables([n_input, n_output], W_init)
+    #     b = bias_variables([n_output], b_init)
+    #     param.append([W, b])
+    #
+    #     # 2. Forward propagation
+    #     z = tf.matmul(current_input, W) + b
+    #     bn = batch_norm_wrapper(z, is_training)
+    #     h_fc = tf.nn.relu(bn)
+    #     h_fc_drop = tf.nn.dropout(h_fc, kp[layer_i])
+    #     current_input = h_fc_drop
+    #
+    # # Hidden layers ---> Output
+    # W = weight_variables([w_hidden[-1], w_output])
+    # b = bias_variables([w_output])
+    # h_fc = tf.nn.relu(tf.matmul(current_input, W) + b)
+    # prediction = tf.nn.softmax(h_fc)
 
     # Input ---> hidden layers
     for layer_i, n_output in enumerate(w_hidden):
@@ -98,31 +124,32 @@ def build_graph(is_training, w_input, w_hidden=[200, 100], w_output=2, given_ini
     h_fc = tf.nn.relu(tf.matmul(current_input, W) + b)
     prediction = tf.nn.softmax(h_fc)
 
+
     with tf.name_scope('Loss'):  # Cross-entropy loss
-        loss = tf.reduce_mean(-tf.reduce_sum(ys * tf.log(prediction),
+        loss = tf.reduce_mean(-tf.reduce_sum(ys * tf.log(prediction+1e-20) * class_factor,
                                              reduction_indices=[1]))
         tf.summary.scalar('Loss/', loss)
     with tf.name_scope('Train'):
-        train_step = tf.train.AdamOptimizer(5e-4).minimize(loss)
+        train_step = tf.train.AdamOptimizer(2e-4).minimize(loss)
 
-    return (xs, ys), x_shift, x_scale, kp, train_step, loss, prediction, tf.train.Saver()
+    return (xs, ys), class_factor, x_shift, x_scale, kp, train_step, loss, prediction, tf.train.Saver()
 
 
 '''
 2. Functions for loading a network
 '''
 
-def load_nn(ct_tag):
-    global train_gene, input_shift, input_scale, w_hidden
-    train_gene, input_shift, input_scale, w_hidden = pickle.load(open('data/Input_parameter_'+ct_tag+".pickle", "rb"))
+def load_nn(ct_tag, is_training=False):
+    global train_gene, input_shift, input_scale, w_hidden, w_output
+    train_gene, input_shift, input_scale, w_hidden, w_output = pickle.load(open('data/Input_parameter_'+ct_tag+".pickle", "rb"))
     n_feature = len(train_gene)
     tf.reset_default_graph()
-    global xs, ys, x_shift, x_scale, kp, train_step, loss, prediction, saver
-    (xs, ys), x_shift, x_scale, kp, train_step, loss, prediction, saver = build_graph(is_training = True,
-                                                                                      w_input = n_feature,
-                                                                                      w_hidden = w_hidden,
-                                                                                      w_output = 2,
-                                                                                      given_initial = None)
+    global xs, ys, class_factor, x_shift, x_scale, kp, train_step, loss, prediction, saver
+    (xs, ys), class_factor, x_shift, x_scale, kp, train_step, loss, prediction, saver = build_graph(is_training = is_training,
+                                                                                                    w_input=n_feature,
+                                                                                                    w_hidden=w_hidden,
+                                                                                                    w_output=w_output,
+                                                                                                    given_initial=None)
     global sess
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
@@ -132,8 +159,8 @@ def load_nn(ct_tag):
 3. Predict testing data
 '''
 
-def nn_pred(model_tag, test_data):
-    load_nn(model_tag)
+def nn_pred(model_tag, test_data, is_training=False):
+    load_nn(model_tag, is_training=is_training)
     test_x, test_g, test_y, _ = test_data
     test_x, test_g = select_genes(test_x, test_g, train_gene)
 

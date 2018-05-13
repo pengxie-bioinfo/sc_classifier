@@ -28,9 +28,13 @@ def tSNE_plot(x, label, names=None, seed=0):
     ax.set_ylabel("tSNE-2")
     ax.legend(loc="best")
 
-def mark_plot(dns, genes, tsne, marker, celltype, ax):
-    mexp = dns[:, genes.index(marker)]
-    mexp = np.log(mexp + 1)
+def mark_plot(dns, genes, tsne, marker, celltype, ax=None, mexp=None, log=True):
+    if mexp is None:
+        mexp = dns[:, genes.index(marker)]
+    if log:
+        mexp = np.log(mexp + 1)
+    if ax is None:
+        fig, ax = plt.subplot()
     mexp = (mexp - np.mean(mexp)) / np.std(mexp)
     mexp = mexp.tolist()
     ax.scatter(tsne[:, 0], tsne[:, 1], c=mexp, cmap=cm.coolwarm, vmin=min(mexp),

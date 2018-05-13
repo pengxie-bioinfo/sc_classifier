@@ -158,6 +158,9 @@ def load_pickle_control_each_type(file_path, select_label=[0], n_each_type=0, av
     return([dns, genes, label, cell_id])
 
 def select_genes(x, x_genes, ref_genes):
+    if len(x_genes) == len(ref_genes):
+        if np.sum(np.array(x_genes) == np.array(ref_genes)) == len(x_genes):
+            return(x, x_genes)
     y = np.zeros((len(x), len(ref_genes)))
     for i in range(len(ref_genes)):
         if x_genes.count(ref_genes[i]) > 0:
@@ -174,8 +177,13 @@ def remove_mt_rp(x, genes):
     '''
     lab = []
     for i in range(len(genes)):
-        if ((re.match('MT', genes[i]) == None)  # remove mitochondrial genes
-                & (re.match('RP', genes[i]) == None)):
+        mt = re.compile('mt', re.IGNORECASE)
+        rpl = re.compile('rpl', re.IGNORECASE)
+        rps = re.compile('rps', re.IGNORECASE)
+        if ((re.match(mt, genes[i]) == None)  # remove mitochondrial genes
+                & (re.match(rpl, genes[i]) == None)
+                & (re.match(rps, genes[i]) == None)
+            ):
             lab.append(i)
     x = x[:, lab]
     genes = [genes[i] for i in lab]

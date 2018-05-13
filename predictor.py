@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn import preprocessing
+from scipy import sparse
 import pickle
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -29,17 +30,26 @@ if __name__ == '__main__':
     else:
         data = pickle.load(open(input, 'rb'))
     # Add dummy parameters
+    if sparse.issparse(data[0]):
+        data[0] = data[0].toarray()
+    _, _, _, _, w_output = pickle.load(open('data/Input_parameter_'+model_tag+".pickle", "rb"))
     lab = [0] * len(data[0])
     lab[0] = 1
-    lab_mat = label_2_matrix(lab)
+    lab_mat = label_2_matrix(lab_list=range(w_output), label=lab)
     data = data + [lab_mat] + [list(range(len(lab)))]
-    data[0], data[1] = remove_mt_rp(data[0], data[1])
-    data[0] = preprocessing.scale(data[0], axis=1)
+    # data[0], data[1] = remove_mt_rp(data[0], data[1])
+    # data[0] = preprocessing.scale(data[0], axis=1)
 
     ###################################################
     # Make predictions
     ###################################################
 
     pred_prob, pred_lab = nn_pred(model_tag, data)
-    df = pd.DataFrame({'Pred_prob': pred_prob[:, 1], 'Pred_lab': pred_lab})
+    if pred_prob.shape[1] == 2:  # Binary prediction
+        print('Percentage of predicted %s:\t%f' % (model_tag, np.sum(pred_lab==1)/len(pred_lab)))
+        df = pd.DataFrame({'Pred_prob': pred_prob[:, 1], 'Pred_lab': pred_lab})
+    else:
+        row_max = np.max(pred_prob, axis=1).reshape(-1,1)
+        print('Percentage of prediction:\n', np.mean((pred_prob == row_max)*1, axis=0))
+        df = pd.DataFrame(np.append(pred_prob, pred_lab.reshape(-1,1), axis=1))
     df.to_csv(output)
