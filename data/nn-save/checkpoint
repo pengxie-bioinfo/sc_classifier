@@ -1,0 +1,2 @@
+model_checkpoint_path: "nn-saveMCA_corrected_2000"
+all_model_checkpoint_paths: "nn-saveMCA_corrected_2000"
