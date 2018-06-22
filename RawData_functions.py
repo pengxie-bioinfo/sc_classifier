@@ -157,15 +157,30 @@ def load_pickle_control_each_type(file_path, select_label=[0], n_each_type=0, av
         cell_id = [cell_id[i] for i in lab]
     return([dns, genes, label, cell_id])
 
+# def select_genes(x, x_genes, ref_genes):
+#     if len(x_genes) == len(ref_genes):
+#         if np.sum(np.array(x_genes) == np.array(ref_genes)) == len(x_genes):
+#             return(x, x_genes)
+#     y = np.zeros((len(x), len(ref_genes)))
+#     for i in range(len(ref_genes)):
+#         if x_genes.count(ref_genes[i]) > 0:
+#             tp = x[:,x_genes.index(ref_genes[i])]
+#             y[:,i] = tp
+#     return(y, ref_genes)
 def select_genes(x, x_genes, ref_genes):
     if len(x_genes) == len(ref_genes):
         if np.sum(np.array(x_genes) == np.array(ref_genes)) == len(x_genes):
+            print('Gene IDs identical to reference.')
             return(x, x_genes)
     y = np.zeros((len(x), len(ref_genes)))
+    ct = 0
     for i in range(len(ref_genes)):
         if x_genes.count(ref_genes[i]) > 0:
             tp = x[:,x_genes.index(ref_genes[i])]
             y[:,i] = tp
+        else:
+            ct = ct+1
+    print('Number of NA genes: ', ct)
     return(y, ref_genes)
 
 def remove_mt_rp(x, genes):

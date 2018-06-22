@@ -19,7 +19,7 @@ def weight_variables(shape, given_initial=None):
         initial = tf.truncated_normal(shape, stddev=0.1)
     else:
         initial = given_initial
-    return tf.Variable(initial)
+    return tf.Variable(initial, name='W')
 
 
 def bias_variables(shape, given_initial=None):
@@ -27,12 +27,12 @@ def bias_variables(shape, given_initial=None):
         initial = tf.constant(0.1, dtype=tf.float32, shape=shape)
     else:
         initial = given_initial
-    return tf.Variable(initial)
+    return tf.Variable(initial, name='b')
 
 
 # this is a simpler version of Tensorflow's 'official' version. See:
 # https://github.com/tensorflow/tensorflow/blob/master/tensorflow/contrib/layers/python/layers/layers.py#L102
-def batch_norm_wrapper(inputs, is_training, decay=0.99):
+def batch_norm_wrapper(inputs, is_training=True, decay=0.99):
     epsilon = 0.001
     scale = tf.Variable(tf.ones([inputs.get_shape()[-1]]))
     beta = tf.Variable(tf.zeros([inputs.get_shape()[-1]]))
@@ -53,56 +53,28 @@ def batch_norm_wrapper(inputs, is_training, decay=0.99):
                                          pop_mean, pop_var, beta, scale, epsilon)
 
 
-def build_graph(is_training, w_input, w_hidden=[200, 100], w_output=2, given_initial=None):
+def build_graph(w_input, w_hidden=[200, 100], w_output=2, given_initial=None):
     '''
-    :param is_training: training mode uses batch mean/var; non-training mode uses overall mean/var
     :param n_feature: in the cell-typing case, this is the number of genes at input layer
     :param n_output:
     :return:
     '''
     # Placeholders
-    x_shift = tf.placeholder(tf.float32, [None, w_input])
-    x_scale = tf.placeholder(tf.float32, [None, w_input])
-    xs = tf.placeholder(tf.float32, [None, w_input])
-    ys = tf.placeholder(tf.float32, [None, w_output])
-    class_factor = tf.placeholder(tf.float32, [None, w_output])  # A factor for balancing class training samples
-    kp = tf.placeholder(tf.float32, len(w_hidden))
+    x_shift = tf.placeholder(tf.float32, [None, w_input], name='x_shift')
+    x_scale = tf.placeholder(tf.float32, [None, w_input], name='x_scale')
+    xs = tf.placeholder(tf.float32, [None, w_input], name='xs')
+    ys = tf.placeholder(tf.float32, [None, w_output], name='ys')
+    class_factor = tf.placeholder(tf.float32, [None, w_output], name='class_factor')  # A factor for balancing class training samples
+    kp = tf.placeholder(tf.float32, len(w_hidden), name='kp')
     param = []
 
-    # Input Normalization
-    #     xs = (xs - x_shift) / x_scale  # Subject to change!!!
-
-    current_input = xs
 
     # Input ---> hidden layers
-    # for layer_i, n_output in enumerate(w_hidden):
-    #     # 1. Initialize parameters
-    #     n_input = int(current_input.get_shape()[1])
-    #     if given_initial == None:
-    #         W_init, b_init = None, None
-    #     else:
-    #         W_init, b_init = given_initial[layer_i]
-    #     W = weight_variables([n_input, n_output], W_init)
-    #     b = bias_variables([n_output], b_init)
-    #     param.append([W, b])
-    #
-    #     # 2. Forward propagation
-    #     z = tf.matmul(current_input, W) + b
-    #     bn = batch_norm_wrapper(z, is_training)
-    #     h_fc = tf.nn.relu(bn)
-    #     h_fc_drop = tf.nn.dropout(h_fc, kp[layer_i])
-    #     current_input = h_fc_drop
-    #
-    # # Hidden layers ---> Output
-    # W = weight_variables([w_hidden[-1], w_output])
-    # b = bias_variables([w_output])
-    # h_fc = tf.nn.relu(tf.matmul(current_input, W) + b)
-    # prediction = tf.nn.softmax(h_fc)
-
-    # Input ---> hidden layers
+    current_input_train = xs
+    current_input_test = xs
     for layer_i, n_output in enumerate(w_hidden):
         # 1. Initialize parameters
-        n_input = int(current_input.get_shape()[1])
+        n_input = int(current_input_train.get_shape()[1])
         if given_initial == None:
             W_init, b_init = None, None
         else:
@@ -112,60 +84,75 @@ def build_graph(is_training, w_input, w_hidden=[200, 100], w_output=2, given_ini
         param.append([W, b])
 
         # 2. Forward propagation
-        z = tf.matmul(current_input, W) + b
-        bn = batch_norm_wrapper(z, is_training)
+        # For training purpose, we perform batch normalization
+        z_train = tf.matmul(current_input_train, W) + b
+        bn = batch_norm_wrapper(z_train)
         h_fc = tf.nn.relu(bn)
         h_fc_drop = tf.nn.dropout(h_fc, kp[layer_i])
-        current_input = h_fc_drop
+        current_input_train = h_fc_drop
+        # For testing purpose, we do not perform batch normalization. Important!
+        z_test = tf.matmul(current_input_test, W) + b
+        current_input_test = tf.nn.relu(z_test)
 
     # Hidden layers ---> Output
     W = weight_variables([w_hidden[-1], w_output])
     b = bias_variables([w_output])
-    h_fc = tf.nn.relu(tf.matmul(current_input, W) + b)
-    prediction = tf.nn.softmax(h_fc)
+    h_fc_train = tf.nn.relu(tf.matmul(current_input_train, W) + b, name='Final_activation_train')
+    h_fc_test = tf.nn.relu(tf.matmul(current_input_test, W) + b, name='Final_activation_test')
+    prediction_train = tf.nn.softmax(h_fc_train, name='Prediction_train')
+    prediction_test = tf.nn.softmax(h_fc_test, name='Prediction_test')
 
-
+    ########################################################################
+    #   OP's for training
+    ########################################################################
     with tf.name_scope('Loss'):  # Cross-entropy loss
-        loss = tf.reduce_mean(-tf.reduce_sum(ys * tf.log(prediction+1e-20) * class_factor,
-                                             reduction_indices=[1]))
+        loss = tf.reduce_mean(-tf.reduce_sum(ys * tf.log(prediction_train+1e-20) * class_factor,
+                                             reduction_indices=[1]), name='loss')
         tf.summary.scalar('Loss/', loss)
     with tf.name_scope('Train'):
-        train_step = tf.train.AdamOptimizer(2e-4).minimize(loss)
+        train_step = tf.train.AdamOptimizer(5e-4, name='AdamOptimizer').minimize(loss, name='min_loss')
 
-    return (xs, ys), class_factor, x_shift, x_scale, kp, train_step, loss, prediction, tf.train.Saver()
+    ########################################################################
+    #   OP's for testing
+    ########################################################################
+    y_pred = tf.argmax(prediction_test, 1)
+    y_true = tf.argmax(ys, 1)
+    accuracy = tf.reduce_mean(tf.cast(tf.equal(y_pred, y_true), tf.float32), name='Accuracy')
+    return (xs, ys), class_factor, x_shift, x_scale, kp, train_step, loss, prediction_test, accuracy, tf.train.Saver()
 
-
-'''
-2. Functions for loading a network
-'''
-
-def load_nn(ct_tag, is_training=False):
-    global train_gene, input_shift, input_scale, w_hidden, w_output
-    train_gene, input_shift, input_scale, w_hidden, w_output = pickle.load(open('data/Input_parameter_'+ct_tag+".pickle", "rb"))
-    n_feature = len(train_gene)
-    tf.reset_default_graph()
-    global xs, ys, class_factor, x_shift, x_scale, kp, train_step, loss, prediction, saver
-    (xs, ys), class_factor, x_shift, x_scale, kp, train_step, loss, prediction, saver = build_graph(is_training = is_training,
-                                                                                                    w_input=n_feature,
-                                                                                                    w_hidden=w_hidden,
-                                                                                                    w_output=w_output,
-                                                                                                    given_initial=None)
-    global sess
-    sess = tf.Session()
-    sess.run(tf.global_variables_initializer())
-    saver.restore(sess, 'data/nn-save/nn-save'+ct_tag)
 
 '''
 3. Predict testing data
 '''
 
-def nn_pred(model_tag, test_data, is_training=False):
-    load_nn(model_tag, is_training=is_training)
-    test_x, test_g, test_y, _ = test_data
-    test_x, test_g = select_genes(test_x, test_g, train_gene)
-
+def nn_pred(model_tag, test_data):
+    # Load model
+    global train_gene, input_shift, input_scale, w_hidden, w_output
+    train_gene, input_shift, input_scale, w_hidden, w_output = pickle.load(open('data/Input_parameter_'+model_tag+".pickle", "rb"))
+    tf.reset_default_graph()
+    global saver, graph, predition, xs, ys, x_shift, x_scale, kp
+    saver = tf.train.import_meta_graph('./data/nn-save/' + model_tag + '/model.meta')
+    graph = tf.get_default_graph()
+    prediction = graph.get_tensor_by_name("Prediction_test:0")
+    xs = graph.get_tensor_by_name("xs:0")
+    ys = graph.get_tensor_by_name("ys:0")
+    x_shift = graph.get_tensor_by_name("x_shift:0")
+    x_scale = graph.get_tensor_by_name("x_scale:0")
+    kp = graph.get_tensor_by_name("kp:0")
+    # Restore values of graph
+    global sess
+    sess = tf.Session()
+    sess.run(tf.global_variables_initializer())
+    saver.restore(sess, './data/nn-save/' + model_tag + '/model')
+    # Testing data
+    test_x, _, test_y, _ = test_data
+    # Make predictions
     keep_1 = [1]*len(w_hidden)
-    feed = {xs: test_x, ys: test_y, x_shift: input_shift, x_scale: input_scale, kp:keep_1}
+    feed = {xs: test_x,
+            ys: test_y,
+            x_shift: input_shift,
+            x_scale: input_scale,
+            kp:keep_1}
     preds = sess.run(prediction, feed_dict=feed)
     pred_label = np.argmax(preds, axis=1)
     return [preds, pred_label]
