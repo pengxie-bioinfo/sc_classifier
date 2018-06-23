@@ -241,8 +241,9 @@ def label_2_matrix(label, lab_list=None):
     return(y)
 
 def input_formatting(input_file, output_file):
-    df = pd.read_csv(input_file)
-    data = [np.transpose(np.array(df.iloc[:,1:])), df.iloc[:,0].tolist()]
+    df = pd.read_csv(input_file, header=0, index_col=0)
+    print(df.shape)
+    data = [np.transpose(np.array(df)), df.index.tolist()]
     print("Number of cells:\t", data[0].shape[0])
     print("Number of genes:\t", data[0].shape[1])
     pickle.dump(data, open(output_file, 'wb'))

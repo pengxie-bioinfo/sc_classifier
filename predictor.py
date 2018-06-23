@@ -6,7 +6,7 @@ import pickle
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from NN_utils import nn_pred
-from RawData_functions import label_2_matrix, remove_mt_rp, input_formatting
+from RawData_functions import label_2_matrix, remove_mt_rp, input_formatting, select_genes
 import argparse
 
 if __name__ == '__main__':
@@ -20,6 +20,8 @@ if __name__ == '__main__':
     output = args.output
     model_tag = args.predictor  # Tag of the pre-trained model
 
+    ref_genes, _, _, _, _ = pickle.load(open('data/Input_parameter_'+model_tag+".pickle", "rb"))
+
     ###################################################
     # Load testing data
     ###################################################
@@ -27,6 +29,7 @@ if __name__ == '__main__':
     if args.input_is_csv:
         input_formatting(input, input+'.pickle')
         data = pickle.load(open(input+'.pickle', 'rb'))
+        data[0], _ = select_genes(data[0], data[1], ref_genes)
     else:
         data = pickle.load(open(input, 'rb'))
     # Add dummy parameters
