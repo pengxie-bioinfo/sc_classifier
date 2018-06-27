@@ -1,0 +1,2 @@
+model_checkpoint_path: "nn-saveMCA_original_2000_10x"
+all_model_checkpoint_paths: "nn-saveMCA_original_2000_10x"
